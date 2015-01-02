@@ -78,6 +78,11 @@ class XMLParser(object):
             for grandchild in child:
                 grandchild_tag = XMLParser.get_tag(grandchild.tag)
                 grandchild_text = grandchild.text
+
+                if grandchild_text is None:
+                    print(entry['name'], grandchild_tag, ElementTree.tostring(child), file=sys.stderr)
+                    continue
+
                 if grandchild_tag == 'fullName':
                     grand_category = 'full'
                 elif grandchild_tag == 'shortName':
@@ -98,6 +103,11 @@ class XMLParser(object):
     @staticmethod
     def get_gene(tag, gene_element, entry):
         for child in gene_element:
+
+            if child.text is None:
+                print(entry['name'], XMLParser.get_tag(child.tag), ElementTree.tostring(child), file=sys.stderr)
+                continue
+
             entry['gene'].append((child.attrib['type'], child.text))
 
     @staticmethod
@@ -106,6 +116,11 @@ class XMLParser(object):
             child_tag = XMLParser.get_tag(child.tag)
 
             if child_tag == 'name':
+
+                if child.text is None:
+                    print(entry['name'], child_tag, ElementTree.tostring(organism_element), file=sys.stderr)
+                    continue
+
                 if child.attrib['type'] == 'common':
                     entry['organism'].append(('organism_common', child.text))
                 elif child.attrib['type'] == 'scientific':
@@ -114,7 +129,7 @@ class XMLParser(object):
                     continue
             elif child_tag == 'dbReference':
                 if child.attrib['type'] == 'NCBI Taxonomy':
-                    entry['organism'].append(('organism_ncbi_id', child.text))
+                    entry['organism'].append(('organism_ncbi_id', child.attrib['id']))
 
     @staticmethod
     def get_new_entry():
@@ -151,11 +166,14 @@ class XMLParser(object):
         wbk_entry['uri'] = 'http://uniprot.org/uniprot/' + entry['accession'][0]
 
         # add entry name to name list and property dict
-        wbk_entry['name'].append(entry['name'])
-        wbk_entry['properties'].append(XMLParser.get_weibaike_property('name', entry['name']))
+        if entry['name'] is not None:
+            wbk_entry['name'].append(entry['name'])
+            wbk_entry['properties'].append(XMLParser.get_weibaike_property('name', entry['name']))
 
         # add all accessions to name list and property dict
         for accession in entry['accession']:
+            if accession is None:
+                continue
             wbk_entry['name'].append(accession)
             wbk_entry['properties'].append(XMLParser.get_weibaike_property('accession', accession))
 
@@ -164,7 +182,7 @@ class XMLParser(object):
         # and set it as a property
         if 'recommend' in entry['protein']:
             for block in entry['protein']['recommend']:
-                names = [b[1] for b in block]
+                names = [b[1] for b in block if b[1] is not None]
                 wbk_entry['name'] += names
                 wbk_entry['properties'].append(XMLParser.get_weibaike_property('pro_rec',
                                                                                '|'.join(names)))
@@ -173,7 +191,7 @@ class XMLParser(object):
         # and set it as a property
         if 'alter' in entry['protein']:
             for block in entry['protein']['alter']:
-                names = [b[1] for b in block]
+                names = [b[1] for b in block if b[1] is not None]
                 wbk_entry['name'] += names
                 wbk_entry['properties'].append(XMLParser.get_weibaike_property('pro_alt',
                                                                                '|'.join(names)))
@@ -182,7 +200,7 @@ class XMLParser(object):
         # make a property gene_type for each gene name, e.g., gene_primary, gene_synonym
         for name in entry['gene']:
             wbk_entry['name'].append(name[1])
-            prop_key = 'gene_' + name[0].lower()
+            prop_key = 'gene_' + name[0].lower().replace(' ', '_')
             wbk_entry['properties'].append(XMLParser.get_weibaike_property(prop_key, name[1]))
 
         # add organism info into property dict
@@ -200,11 +218,15 @@ class XMLParser(object):
     def get_tag(uri_tag):
         # get the tag without uri
         # {http://uniprot.org/uniprot}name
-        return uri_tag[uri_tag.find('}') + 1:]
+        index = uri_tag.find('}')
+        if index is None:
+            print(uri_tag, file=sys.stderr)
+            return uri_tag
+        else:
+            return uri_tag[index + 1:]
 
     def parse(self, filepath):
         # get an iterable
-        ElementTree.register_namespace('2', 'http://uniprot.org/uniprot')
         context = ElementTree.iterparse(filepath, events=("start", "end"))
 
         # turn it into an iterator
@@ -222,9 +244,9 @@ class XMLParser(object):
                     if tag in self.tag_processors:
                         self.tag_processors[tag](tag, child, entry)
 
+                # if entry's name and uniprot ac is None, skip it
                 if entry['name'] is None or entry['accession'] is None:
                     continue
-
                 wbk_entry = XMLParser.get_weibaike_entry(entry)
                 entry_json = json.dumps(wbk_entry)
                 print(entry_json)
@@ -233,6 +255,9 @@ class XMLParser(object):
                 # clear the root node to avoid too many empty elements
                 root.clear()
 
+
 if __name__ == '__main__':
     parser = XMLParser()
-    parser.parse('data/uniprot_sprot.xml')
+    # parser.parse('data/uniprot_sprot_noxmlns.xml')
+    # parser.parse('data/test.xml')
+    parser.parse('data/14000_lines.xml')

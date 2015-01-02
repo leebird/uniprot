@@ -243,9 +243,13 @@ class XMLParser(object):
             entry_json = json.dumps(wbk_entry)
             print(entry_json)
 
+            # clear element
+            # http://stackoverflow.com/questions/12160418/why-is-lxml-etree-iterparse-eating-up-all-my-memory
+            element.clear()
+
 
 if __name__ == '__main__':
     parser = XMLParser()
-    # parser.parse('data/uniprot_sprot_noxmlns.xml')
+    parser.parse('data/uniprot_sprot.xml')
     # parser.parse('data/test.xml')
-    parser.parse('data/14000_lines.xml')
+    # parser.parse('data/14000_lines.xml')

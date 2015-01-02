@@ -1,5 +1,5 @@
 import sys
-from xml.etree import ElementTree
+from lxml import etree
 import json
 from pprint import pprint
 
@@ -80,7 +80,7 @@ class XMLParser(object):
                 grandchild_text = grandchild.text
 
                 if grandchild_text is None:
-                    print(entry['name'], grandchild_tag, ElementTree.tostring(child), file=sys.stderr)
+                    print(entry['name'], grandchild_tag, etree.tostring(child), file=sys.stderr)
                     continue
 
                 if grandchild_tag == 'fullName':
@@ -105,7 +105,7 @@ class XMLParser(object):
         for child in gene_element:
 
             if child.text is None:
-                print(entry['name'], XMLParser.get_tag(child.tag), ElementTree.tostring(child), file=sys.stderr)
+                print(entry['name'], XMLParser.get_tag(child.tag), etree.tostring(child), file=sys.stderr)
                 continue
 
             entry['gene'].append((child.attrib['type'], child.text))
@@ -118,7 +118,7 @@ class XMLParser(object):
             if child_tag == 'name':
 
                 if child.text is None:
-                    print(entry['name'], child_tag, ElementTree.tostring(organism_element), file=sys.stderr)
+                    print(entry['name'], child_tag, etree.tostring(organism_element), file=sys.stderr)
                     continue
 
                 if child.attrib['type'] == 'common':
@@ -227,33 +227,21 @@ class XMLParser(object):
 
     def parse(self, filepath):
         # get an iterable
-        context = ElementTree.iterparse(filepath, events=("start", "end"))
-
-        # turn it into an iterator
-        context = iter(context)
-
-        # get the root element
-        event, root = next(context)
+        context = etree.iterparse(filepath, events=("end",), tag="{http://uniprot.org/uniprot}entry")
 
         for event, element in context:
-            tag = self.get_tag(element.tag)
-            if event == 'start' and tag == 'entry':
-                entry = self.get_new_entry()
-                for child in element:
-                    tag = self.get_tag(child.tag)
-                    if tag in self.tag_processors:
-                        self.tag_processors[tag](tag, child, entry)
+            entry = self.get_new_entry()
+            for child in element:
+                tag = self.get_tag(child.tag)
+                if tag in self.tag_processors:
+                    self.tag_processors[tag](tag, child, entry)
 
-                # if entry's name and uniprot ac is None, skip it
-                if entry['name'] is None or entry['accession'] is None:
-                    continue
-                wbk_entry = XMLParser.get_weibaike_entry(entry)
-                entry_json = json.dumps(wbk_entry)
-                print(entry_json)
-
-            if event == 'end' and tag == 'entry':
-                # clear the root node to avoid too many empty elements
-                root.clear()
+            # if entry's name and uniprot ac is None, skip it
+            if entry['name'] is None or entry['accession'] is None:
+                continue
+            wbk_entry = XMLParser.get_weibaike_entry(entry)
+            entry_json = json.dumps(wbk_entry)
+            print(entry_json)
 
 
 if __name__ == '__main__':

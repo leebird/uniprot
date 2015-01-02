@@ -237,7 +237,7 @@ class XMLParser(object):
 
         for event, element in context:
             tag = self.get_tag(element.tag)
-            if event == 'start' and tag == 'entry':
+            if event == 'end' and tag == 'entry':
                 entry = self.get_new_entry()
                 for child in element:
                     tag = self.get_tag(child.tag)
@@ -251,9 +251,6 @@ class XMLParser(object):
                 entry_json = json.dumps(wbk_entry)
                 print(entry_json)
 
-            if event == 'end' and tag == 'entry':
-                # clear the root node to avoid too many empty elements
-                root.clear()
 
 
 if __name__ == '__main__':

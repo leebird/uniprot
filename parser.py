@@ -2,6 +2,8 @@ import sys
 from lxml import etree
 import json
 from pprint import pprint
+import gzip
+import pickle
 
 
 class TextParser(object):
@@ -53,6 +55,8 @@ class XMLParser(object):
             'protein': XMLParser.get_protein,
             'gene': XMLParser.get_gene,
             'organism': XMLParser.get_organism,
+            'sequence': XMLParser.get_sequence,
+            'keyword': XMLParser.get_keyword
         }
 
     @staticmethod
@@ -62,6 +66,14 @@ class XMLParser(object):
     @staticmethod
     def get_accession(tag, accession_element, entry):
         entry['accession'].append(accession_element.text)
+
+    @staticmethod
+    def get_sequence(tag, element, entry):
+        entry['sequence'] = element.text
+
+    @staticmethod
+    def get_keyword(tag, element, entry):
+        entry['keyword'].append(element.text)
 
     @staticmethod
     def get_protein(tag, protein_element, entry):
@@ -93,12 +105,12 @@ class XMLParser(object):
                 if grandchild_text is None:
                     continue
 
-                child_block.append((grand_category, grandchild.text))
+                child_block.append((category, grand_category, grandchild.text))
 
             if category in entry['protein']:
-                entry['protein'][category].append(child_block)
+                entry['protein'] += child_block
             else:
-                entry['protein'][category] = [child_block]
+                entry['protein'] = child_block
 
     @staticmethod
     def get_gene(tag, gene_element, entry):
@@ -133,19 +145,24 @@ class XMLParser(object):
 
     @staticmethod
     def get_new_entry():
-        return {'name': None,
-                'accession': [],
-                'protein': {},
-                'gene': [],
-                'organism': []}
+        return {
+            'name': None,
+            'accession': [],
+            'protein': {},
+            'gene': [],
+            'organism': [],
+            'keyword':[]
+        }
 
     @staticmethod
     def get_new_weibaike_entry():
-        return {'uri': None,
-                'name': [],
-                'description': None,
-                'properties': [],
-                'links': {}}
+        return {
+            'uri': None,
+            'name': [],
+            'description': None,
+            'properties': [],
+            'links': {}
+        }
 
     @staticmethod
     def get_weibaike_property(label, value):
@@ -227,7 +244,8 @@ class XMLParser(object):
 
     def parse(self, filepath):
         # get an iterable
-        context = etree.iterparse(filepath, events=("end",), tag="{http://uniprot.org/uniprot}entry")
+        context = etree.iterparse(gzip.GzipFile(filepath), 
+                                  events=("end",), tag="{http://uniprot.org/uniprot}entry")
 
         for event, element in context:
             entry = self.get_new_entry()
@@ -239,17 +257,34 @@ class XMLParser(object):
             # if entry's name and uniprot ac is None, skip it
             if entry['name'] is None or entry['accession'] is None:
                 continue
-            wbk_entry = XMLParser.get_weibaike_entry(entry)
-            entry_json = json.dumps(wbk_entry)
-            print(entry_json)
 
+            #wbk_entry = XMLParser.get_weibaike_entry(entry)
+            #entry_json = json.dumps(wbk_entry)
+            #entry_json = json.dumps(entry)
+            yield entry
+            
             # clear element
             # http://stackoverflow.com/questions/12160418/why-is-lxml-etree-iterparse-eating-up-all-my-memory
             element.clear()
 
 
 if __name__ == '__main__':
+    xml_zip_file = sys.argv[1]
     parser = XMLParser()
-    parser.parse('data/uniprot_sprot.xml')
+    with open('ac_to_entrez.pk', 'rb') as f:
+        ac_to_entrez = pickle.load(f)
+    for entry in parser.parse(xml_zip_file):
+        entrez = set()
+        for ac in entry['accession']:
+            if ac in ac_to_entrez:
+                entrez |= ac_to_entrez[ac]
+        entry['entrez'] = sorted(list(entrez))
+        for kw in entry['keyword']:
+            if 'kinase' in kw.lower():
+                entry['kinase_in_keyword'] = True
+                del entry['keyword']
+                break
+        entry_json = json.dumps(entry)
+        print(entry_json)
     # parser.parse('data/test.xml')
     # parser.parse('data/14000_lines.xml')
